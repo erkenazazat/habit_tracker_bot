@@ -1,7 +1,7 @@
-# handlers.py
 from telebot import types
 from datetime import datetime
 from models import HabitManager, AdvancedHabit
+from features import handle_features_direct # Импортируем прямую обработку фич
 
 manager = HabitManager()
 user_states = {}
@@ -41,6 +41,7 @@ LOCALIZATION = {
     }
 }
 
+
 def get_main_keyboard(user_id):
     lang = manager.get_language(user_id)
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -49,10 +50,110 @@ def get_main_keyboard(user_id):
     keyboard.add(LOCALIZATION[lang]["lang_btn"])
     return keyboard
 
+
+def register_handlers(bot):
+    @bot.message_handler(commands=['start'])
+    def start_command(message):
+        keyboard = types.InlineKeyboardMarkup()
+        keyboard.add(types.InlineKeyboardButton("Русский 🇷🇺", callback_data="setlang_ru"))
+        keyboard.add(types.InlineKeyboardButton("Қазақша 🇰🇿", callback_data="setlang_kk"))
+        keyboard.add(types.InlineKeyboardButton("English 🇬🇧", callback_data="setlang_en"))
+        bot.send_message(message.chat.id, "Сәлем! Выберите язык / Тілді таңдаңыз / Choose language:",
+                         reply_markup=keyboard)
+
+    @bot.message_handler(content_types=['text'])
+    def handle_menu(message):
+        uid = message.chat.id
+        lang = manager.get_language(uid)
+
+        # 1. Сначала строго проверяем главные кнопки меню
+        if message.text in ["➕ Добавить привычку", "➕ Әдет қосу", "➕ Add Habit"]:
+            bot.send_message(uid, LOCALIZATION[lang]["enter_name"])
+            user_states[uid] = {"step": "waiting_name", "days": []}
+
+        elif message.text in ["📋 Мои привычки", "📋 Менің әдеттерім", "📋 My Habits"]:
+            show_habits(bot, uid)
+
+        elif message.text in ["🌐 Тіл / Язык / Language"]:
+            start_command(message)
+
+        # Перенаправляем кнопки Профиля, Идей и Помощи в модуль features.py напрямую
+        elif message.text in ["👤 Профиль", "👤 Profile", "💡 Идеи", "💡 Идеялар", "💡 Suggestions", "ℹ️ Помощь", "ℹ️ Көмек", "ℹ️ Help"]:
+            handle_features_direct(bot, message)
+
+        # 2. И только если это не кнопка меню, проверяем текстовые шаги (FSM)
+        elif uid in user_states:
+            state = user_states[uid]["step"]
+            if state == "waiting_name":
+                user_states[uid]["name"] = message.text
+                bot.send_message(uid, LOCALIZATION[lang]["enter_desc"])
+                user_states[uid]["step"] = "waiting_desc"
+            elif state == "waiting_desc":
+                user_states[uid]["desc"] = message.text
+                bot.send_message(uid, LOCALIZATION[lang]["enter_time"])
+                user_states[uid]["step"] = "waiting_time"
+            elif state == "waiting_time":
+                time_text = message.text.strip()
+                try:
+                    datetime.strptime(time_text, "%H:%M")
+                    user_states[uid]["time"] = time_text
+                    show_days_inline(bot, uid)
+                except ValueError:
+                    error_msg = "❌ Неверный формат! ЧЧ:ММ:" if lang != "en" else "❌ Invalid format! Use HH:MM:"
+                    bot.send_message(uid, error_msg)
+
+    @bot.callback_query_handler(func=lambda call: True)
+    def handle_inline(call):
+        uid = call.message.chat.id
+        lang = manager.get_language(uid)
+
+        if call.data.startswith("setlang_"):
+            new_lang = call.data.split("_")[1]
+            manager.set_language(uid, new_lang)
+            bot.answer_callback_query(call.id, "Done!")
+            bot.send_message(uid, LOCALIZATION[new_lang]["welcome"], reply_markup=get_main_keyboard(uid))
+
+        elif call.data.startswith("day_"):
+            action = call.data.split("_")[1]
+            if action == "done":
+                if uid in user_states:
+                    manager.add_habit(uid, user_states[uid]["name"], user_states[uid]["desc"], user_states[uid]["time"],user_states[uid]["days"])
+                    bot.send_message(uid, LOCALIZATION[lang]["success_add"], reply_markup=get_main_keyboard(uid))
+                    del user_states[uid]
+                    bot.delete_message(uid, call.message.message_id)
+            else:
+                day_idx = int(action)
+                if uid in user_states:
+                    if day_idx in user_states[uid]["days"]:
+                        user_states[uid]["days"].remove(day_idx)
+                    else:
+                        user_states[uid]["days"].append(day_idx)
+                    bot.delete_message(uid, call.message.message_id)
+                    show_days_inline(bot, uid)
+
+        elif call.data.startswith("check_"):
+            idx = int(call.data.split("_")[1])
+            res = manager.check_habit(uid, idx)
+            if res == "success":
+                bot.answer_callback_query(call.id, "🎉")
+                bot.delete_message(uid, call.message.message_id)
+                show_habits(bot, uid)
+            elif res == "already_checked":
+                bot.answer_callback_query(call.id, LOCALIZATION[lang]["already_done"], show_alert=True)
+
+        elif call.data.startswith("del_"):
+            idx = int(call.data.split("_")[1])
+            if manager.delete_habit(uid, idx):
+                bot.answer_callback_query(call.id, "Deleted")
+                bot.delete_message(uid, call.message.message_id)
+                show_habits(bot, uid)
+
+
 def show_days_inline(bot, chat_id):
     lang = manager.get_language(chat_id)
     days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] if lang == "ru" else (
-        ["Дс", "Сс", "Ср", "Бс", "Жм", "Сб", "Жс"] if lang == "kk" else ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+        ["Дс", "Сс", "Ср", "Бс", "Жм", "Сб", "Жс"] if lang == "kk" else ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat",
+                                                                         "Sun"])
     keyboard = types.InlineKeyboardMarkup(row_width=4)
     buttons = [
         types.InlineKeyboardButton(f"{'✅ ' if i in user_states[chat_id]['days'] else ''}{d}", callback_data=f"day_{i}")
@@ -60,6 +161,7 @@ def show_days_inline(bot, chat_id):
     keyboard.add(*buttons)
     keyboard.add(types.InlineKeyboardButton(LOCALIZATION[lang]["done"], callback_data="day_done"))
     bot.send_message(chat_id, LOCALIZATION[lang]["select_days"], reply_markup=keyboard)
+
 
 def show_habits(bot, chat_id):
     lang = manager.get_language(chat_id)
