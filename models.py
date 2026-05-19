@@ -8,6 +8,44 @@ def log_action(func):
         return func(*args, **kwargs)
     return wrapper
 
+class Habit:
+    def __init__(self, name, description, time_str, days_list):
+        self.name = name
+        self.description = description
+        self.time_str = time_str
+        self.days_list = days_list
+        self.created_at = datetime.now().strftime("%Y-%m-%d")
+
+    def get_info(self, lang):
+        days_names = {
+            "ru": ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
+            "kk": ["Дс", "Сс", "Ср", "Бс", "Жм", "Сб", "Жс"],
+            "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        }
+        selected_days = [days_names[lang][d] for d in self.days_list]
+
+        if lang == "ru":
+            return f"📌 *{self.name}*\n📝 {self.description}\n⏰ Время: {self.time_str}\n📅 Дни: {', '.join(selected_days)}"
+        elif lang == "kk":
+            return f"📌 *{self.name}*\n📝 {self.description}\n⏰ Уақыты: {self.time_str}\n📅 Күндері: {', '.join(selected_days)}"
+        else:
+            return f"📌 *{self.name}*\n📝 {self.description}\n⏰ Time: {self.time_str}\n📅 Days: {', '.join(selected_days)}"
+
+class AdvancedHabit(Habit):
+    def __init__(self, name, description, time_str, days_list):
+        super().__init__(name, description, time_str, days_list)
+        self.streak = 0
+        self.last_checked = ""
+
+    def get_info(self, lang):
+        base_info = super().get_info(lang)
+        if lang == "ru":
+            return f"{base_info}\n🔥 Серия: {self.streak} дн."
+        elif lang == "kk":
+            return f"{base_info}\n🔥 Серия: {self.streak} күн"
+        else:
+            return f"{base_info}\n🔥 Streak: {self.streak} days"
+
 class HabitManager:
     def __init__(self, file_path="habits.json", sug_path="suggestions.json"):
         self.file_path = file_path
