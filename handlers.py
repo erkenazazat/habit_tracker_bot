@@ -1,7 +1,7 @@
 from telebot import types
 from datetime import datetime
 from models import HabitManager, AdvancedHabit
-from features import handle_features_direct # Импортируем прямую обработку фич
+from features import handle_features_direct
 
 manager = HabitManager()
 user_states = {}
@@ -66,7 +66,6 @@ def register_handlers(bot):
         uid = message.chat.id
         lang = manager.get_language(uid)
 
-        # 1. Сначала строго проверяем главные кнопки меню
         if message.text in ["➕ Добавить привычку", "➕ Әдет қосу", "➕ Add Habit"]:
             bot.send_message(uid, LOCALIZATION[lang]["enter_name"])
             user_states[uid] = {"step": "waiting_name", "days": []}
@@ -77,11 +76,9 @@ def register_handlers(bot):
         elif message.text in ["🌐 Тіл / Язык / Language"]:
             start_command(message)
 
-        # Перенаправляем кнопки Профиля, Идей и Помощи в модуль features.py напрямую
         elif message.text in ["👤 Профиль", "👤 Profile", "💡 Идеи", "💡 Идеялар", "💡 Suggestions", "ℹ️ Помощь", "ℹ️ Көмек", "ℹ️ Help"]:
             handle_features_direct(bot, message)
 
-        # 2. И только если это не кнопка меню, проверяем текстовые шаги (FSM)
         elif uid in user_states:
             state = user_states[uid]["step"]
             if state == "waiting_name":

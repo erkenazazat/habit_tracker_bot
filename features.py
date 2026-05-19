@@ -30,7 +30,6 @@ def handle_features_direct(bot, message):
     uid = message.chat.id
     lang = manager.get_language(uid)
 
-    # Свежие данные загружаем прямо из менеджера
     manager.data = manager._load_data()
 
     if message.text in ["👤 Профиль", "👤 Profile"]:
@@ -55,14 +54,12 @@ def register_features(bot):
         handle_features_direct(bot, message)
 
 
-# Функция планировщика для уведомлений
 def Dynamic_Notification_Scheduler(bot):
     now = datetime.now()
     target_time = now + timedelta(minutes=15)
     target_time_str = target_time.strftime("%H:%M")
     current_day_index = now.weekday()
 
-    # Перед запуском планировщика обновляем данные из файла json
     manager.data = manager._load_data()
     all_data = manager.data.get("users", {})
     for user_id, habits in all_data.items():
